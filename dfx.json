@@ -1,0 +1,27 @@
+{
+  "canisters": {
+    "miner_backend": {
+      "candid": "src/miner_backend/miner_backend.did",
+      "package": "miner_backend",
+      "type": "rust"
+    },
+    "miner_frontend": {
+      "dependencies": [
+        "miner_backend"
+      ],
+      "source": [
+        "src/miner_frontend/dist"
+      ],
+      "type": "assets",
+      "workspace": "miner_frontend"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}
