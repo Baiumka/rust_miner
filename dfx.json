@@ -1,10 +1,24 @@
 {
   "canisters": {
+    "icp_ledger_canister": {
+      "type": "custom",
+      "candid": "ledger.did",
+      "wasm": "ledger-canister_notify-method.wasm",
+      "remote": {
+        "id": {
+          "ic": "ryjl3-tyaaa-aaaaa-aaaba-cai"
+        }
+      }
+    },      
     "miner_backend": {
       "candid": "src/miner_backend/miner_backend.did",
       "package": "miner_backend",
       "type": "rust"
     },
+    "internet-identity": {
+      "type": "pull",
+      "id": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+    },  
     "miner_frontend": {
       "dependencies": [
         "miner_backend"

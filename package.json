@@ -14,5 +14,9 @@
   "type": "module",
   "workspaces": [
     "src/miner_frontend"
-  ]
+  ],
+  "dependencies": {
+    "@dfinity/auth-client": "^2.4.1",
+    "bootstrap": "^5.3.6"
+  }
 }

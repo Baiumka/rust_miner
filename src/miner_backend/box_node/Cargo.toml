@@ -1,5 +1,5 @@
 [package]
-name = "miner_backend"
+name = "box_node"
 version = "0.1.0"
 edition = "2021"
 
@@ -12,8 +12,4 @@ crate-type = ["cdylib"]
 candid = "0.10"
 ic-cdk = "0.17"
 ic-cdk-timers = "0.11" # Feel free to remove this dependency if you don't need timers
-types = { path = "types" }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-ic-stable-memory = "0.4"
-
+types = { path = "../types" }
