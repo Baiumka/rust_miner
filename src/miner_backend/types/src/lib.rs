@@ -16,9 +16,26 @@ pub struct User {
 
 #[derive(CandidType, Deserialize, Clone)]
 pub struct BoxInfo {
-    pub user: User, 
-    pub canister_id: String,
-    
+    pub user: String, 
+    pub canister_id: String,    
+    pub reg_date: u64,
+    pub end_date: u64,
+}
+
+
+#[derive(CandidType, Deserialize, Clone)]
+pub struct BoxWithCount {
+    pub boxx: BoxInfo, 
+    pub miner_count: u32,
+}
+
+#[derive(CandidType, Deserialize, Clone)]
+pub struct Miner {
+    pub user: String, 
+    pub box_id: String,
+    pub canister_id: String,    
+    pub reg_date: u64,
+    pub end_date: u64,
 }
 
 #[derive(AsFixedSizeBytes)]

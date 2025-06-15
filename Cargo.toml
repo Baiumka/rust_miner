@@ -2,6 +2,7 @@
 members = [
     "src/miner_backend",
     "src/miner_backend/box_node",
-    "src/miner_backend/types"
+    "src/miner_backend/types",
+    "src/miner_backend/miner_node"
 ]
 resolver = "2"

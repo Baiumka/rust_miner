@@ -733,6 +733,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "miner_node"
+version = "0.1.0"
+dependencies = [
+ "candid 0.10.14",
+ "ic-cdk 0.17.2",
+ "ic-cdk-timers",
+ "types",
+]
+
+[[package]]
 name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"

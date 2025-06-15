@@ -3,8 +3,23 @@ type User = record {
 };
 
 type BoxInfo = record {
-  user: User;
-  canister_id: text;
+  user: text;
+  canister_id: text;  
+  reg_date: nat64;
+  end_date: nat64;
+};
+
+type BoxWithCount = record {
+  boxx: BoxInfo;
+  miner_count: nat32;  
+};
+
+type Miner = record {
+  user: text;
+  canister_id: text;  
+  box_id: text;
+  reg_date: nat64;
+  end_date: nat64;
 };
 
 
@@ -18,5 +33,6 @@ service : {
   get_my_balance : () -> (variant { Ok: nat64; Err: text });
   get_my_allowance : () -> (variant { Ok: nat; Err: text });
   create_box : (nat) -> (variant { Ok: text; Err: text });  
-  get_all_boxes : () -> (vec BoxInfo);  
+  create_miner : (text, nat) -> (variant { Ok: text; Err: text });  
+  get_all_boxes : () -> (vec BoxWithCount);  
 }
