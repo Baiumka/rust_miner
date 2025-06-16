@@ -1,15 +1,17 @@
 use types as T;
 use ic_cdk::api;
-use ic_cdk::api::call::call;
+use std::cell::RefCell;
+use std::time::Duration;
 
 thread_local! {
-   static SUB_ACCOUNT: std::cell::RefCell<Vec<u8>> = std::cell::RefCell::new(Vec::new());
+    static SUB_ACCOUNT: RefCell<Vec<u8>> = RefCell::new(Vec::new());   
+
 }
 
 #[ic_cdk::update]
 async fn init(sub: Vec<u8>) -> () {
     SUB_ACCOUNT.with(|s| {
-        *s.borrow_mut() = sub;
+        *s.borrow_mut() = sub;        
     });
 }
 

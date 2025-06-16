@@ -7,6 +7,7 @@ type BoxInfo = record {
   canister_id: text;  
   reg_date: nat64;
   end_date: nat64;
+  is_end: bool;
 };
 
 type BoxWithCount = record {
@@ -20,6 +21,7 @@ type Miner = record {
   box_id: text;
   reg_date: nat64;
   end_date: nat64;
+  is_end: bool;
 };
 
 

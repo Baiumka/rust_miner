@@ -5,7 +5,6 @@ use ic_stable_memory::collections::SVec;
 use ic_stable_memory::derive::{AsFixedSizeBytes, CandidAsDynSizeBytes, StableType};
 use ic_stable_memory;
 
-
 pub const LEDGER_CANISTER: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 
 #[derive(CandidType, Deserialize, Clone)]
@@ -20,6 +19,7 @@ pub struct BoxInfo {
     pub canister_id: String,    
     pub reg_date: u64,
     pub end_date: u64,
+    pub is_end: bool
 }
 
 
@@ -36,11 +36,22 @@ pub struct Miner {
     pub canister_id: String,    
     pub reg_date: u64,
     pub end_date: u64,
+    pub is_end: bool
 }
 
 #[derive(AsFixedSizeBytes)]
 pub struct StableUser {
     pub nickname: SVec<u8>,    
+}
+
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
+pub struct TransferArg {
+    pub from_subaccount: Option<Vec<u8>>,
+    pub to: ICRCAccount,
+    pub amount: Nat,
+    pub fee: Option<Nat>,
+    pub memo: Option<Vec<u8>>,
+    pub created_at_time: Option<u64>,
 }
 
 
@@ -73,8 +84,26 @@ pub struct ICRC2ApproveArgs {
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
+pub enum TranferResult {
+    Ok(Nat), 
+    Err(TransferError),
+}
+
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
+pub enum TransferError {
+    BadFee { expected_fee: Nat },
+    BadBurn { min_burn_amount: Nat },
+    InsufficientFunds { balance: Nat },
+    TooOld,
+    CreatedInFuture { ledger_time: u64 },
+    TemporarilyUnavailable,
+    Duplicate { duplicate_of: Nat },
+    GenericError { error_code: u64, message: String },
+}
+
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
 pub enum ICRC2ApproveResult {
-    Ok(Nat), // Block index
+    Ok(Nat),
     Err(ICRC2ApproveError),
 }
 
