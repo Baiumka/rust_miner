@@ -8,7 +8,7 @@ use ic_cdk::api::management_canister::main::{
 use ic_cdk::api::management_canister::provisional::CanisterSettings;
 use candid::{Nat, Principal};
 use std::collections::BTreeMap;
-use types as T;
+use types::{self as T, BoxWithCount};
 use ic_cdk_timers::{set_timer};
 use std::time::Duration;
 use ic_cdk::api::print;
@@ -17,7 +17,7 @@ use ic_cdk::api::management_canister::main::raw_rand;
 const BOX_NODE_WASM: &[u8] = include_bytes!("../../../target/wasm32-unknown-unknown/release/box_node.wasm");
 const MINER_NODE_WASM: &[u8] = include_bytes!("../../../target/wasm32-unknown-unknown/release/miner_node.wasm");
 
-const CANISTER_CYCLES: u128 = 10_000_000_000_000;
+const CANISTER_CYCLES: u128 = 100_000_000_000;
 const MIN_BOX_COST: u64 = 500_000_000;
 const MIN_MINER_COST: u64 = 500_000;
 const FEE: u64 = 10_000;
@@ -31,6 +31,45 @@ thread_local! {
     static BOX_MINER: std::cell::RefCell<BTreeMap<String, String>> = std::cell::RefCell::new(BTreeMap::new());
     static SUB_INDEX: std::cell::RefCell<u32> = std::cell::RefCell::new(0);
 }
+
+#[ic_cdk::pre_upgrade]
+fn pre_upgrade() {
+    USERS.with(|users| {
+        BOXES.with(|boxes| {
+            MINERS.with(|miners| {
+                BOX_MINER.with(|box_miner| {
+                    SUB_INDEX.with(|sub_index| {
+                        ic_cdk::storage::stable_save((
+                            users.borrow().clone(),
+                            boxes.borrow().clone(),
+                            miners.borrow().clone(),
+                            box_miner.borrow().clone(),
+                            *sub_index.borrow(),
+                        )).expect("Failed to save state to stable memory");
+                    });
+                });
+            });
+        });
+    });
+}
+
+#[ic_cdk::post_upgrade]
+fn post_upgrade() {
+    let (users, boxes, miners, box_miner, sub_index): (
+        BTreeMap<String, T::User>,
+        BTreeMap<String, T::BoxInfo>,
+        BTreeMap<String, T::Miner>,
+        BTreeMap<String, String>,
+        u32,
+    ) = ic_cdk::storage::stable_restore().expect("Failed to restore state from stable memory");
+
+    USERS.with(|u| *u.borrow_mut() = users);
+    BOXES.with(|b| *b.borrow_mut() = boxes);
+    MINERS.with(|m| *m.borrow_mut() = miners);
+    BOX_MINER.with(|bm| *bm.borrow_mut() = box_miner);
+    SUB_INDEX.with(|si| *si.borrow_mut() = sub_index);
+}
+
 
 
 fn get_user_by_princ(principal: String) -> Option<T::User> {
@@ -218,23 +257,36 @@ fn get_all_boxes() -> Vec<T::BoxWithCount> {
         let boxes = boxes_ref.borrow();
 
         for (box_id, box_info) in boxes.iter() {
+            if box_info.is_end {
+                continue; 
+            }
             let active_miners = get_active_miners(box_id.clone());
-
+            let maybe_username = get_user_by_princ(box_info.clone().user);
+            let username: String = match maybe_username {
+                Some(user) => user.nickname,
+                None => "Unknown".to_string(),
+            };
             if !active_miners.is_empty() {
                 result.push(T::BoxWithCount {
-                    boxx: box_info.clone(),
+                    username: username,
                     miner_count: active_miners.len() as u32,
+                    end_date: box_info.clone().end_date,
+                    reg_date: box_info.clone().reg_date,
+                    canister_id: box_info.clone().canister_id,
                 });
             }
             else {
                 result.push(T::BoxWithCount {
-                    boxx: box_info.clone(),
+                    username: username,
                     miner_count: 0,
+                    end_date: box_info.clone().end_date,
+                    reg_date: box_info.clone().reg_date,
+                    canister_id: box_info.clone().canister_id,
                 });
             }
         }
     });
-
+    result.sort_by(|a, b| b.end_date.cmp(&a.end_date));
     result
 }
 
@@ -283,11 +335,11 @@ async fn create_miner(box_id: String, award: Nat) -> Result<String, String> {
                             canister_id: new_canister_id.clone(),
                             box_id: box_id.clone(),
                             reg_date: now,
-                            end_date: now + MINER_TIME,
+                            end_date: now + (MINER_TIME * 1_000_000_000),
                             is_end: false
                         };                                                 
                         MINERS.with(|miners: &std::cell::RefCell<BTreeMap<String, T::Miner>>| {
-                            miners.borrow_mut().insert(new_canister_id.clone(), new_miner_info);
+                            miners.borrow_mut().insert(new_canister_id.clone(), new_miner_info.clone());
                         });
                         BOX_MINER.with(|map| {
                             map.borrow_mut().insert(new_canister_id.clone(), box_id.clone());
@@ -367,6 +419,7 @@ async fn create_miner(box_id: String, award: Nat) -> Result<String, String> {
                             });                                                    
                         });               
                         //--------------
+                       
                         Ok(new_canister_id)
                         
                     },                            
@@ -385,7 +438,7 @@ async fn create_miner(box_id: String, award: Nat) -> Result<String, String> {
 }
 
 #[ic_cdk::update]
-async fn create_box(award: Nat) -> Result<String, String> {        
+async fn create_box(award: Nat) -> Result<T::BoxWithCount, String> {        
     if(award < MIN_BOX_COST)
     {
         return Err(format!("Minimum cost: {:?} ICP", MIN_BOX_COST))
@@ -417,11 +470,11 @@ async fn create_box(award: Nat) -> Result<String, String> {
                             user: ic_cdk::caller().to_text(),
                             canister_id: new_canister_id.clone(),
                             reg_date: now,
-                            end_date: now + LOTTERY_TIME,
+                            end_date: now + (LOTTERY_TIME * 1_000_000_000),
                             is_end: false
                         };    
                         BOXES.with(|boxes: &std::cell::RefCell<BTreeMap<String, T::BoxInfo>>| {
-                            boxes.borrow_mut().insert(new_canister_id.clone(), new_box_info);
+                            boxes.borrow_mut().insert(new_canister_id.clone(), new_box_info.clone());
                         });
                         let result_info = call_get_principal(new_canister_id.clone()).await;
                         //---------TIMER
@@ -430,6 +483,12 @@ async fn create_box(award: Nat) -> Result<String, String> {
                         set_timer(Duration::from_secs(LOTTERY_TIME), move || {                            
                             ic_cdk::spawn(async move {
                                print(format!("Lottery {:?} is over", canister_id_for_lottery.clone()));
+                               BOXES.with(|boxes_ref| {
+                                let mut boxes = boxes_ref.borrow_mut();
+                                if let Some(box_i) = boxes.get_mut(&canister_id_for_lottery.clone()) {
+                                    box_i.is_end = true;
+                                }
+                                });
                                let winner = choose_random_miner(canister_id_for_lottery.clone()).await;
                                if winner.is_some()
                                {
@@ -471,7 +530,19 @@ async fn create_box(award: Nat) -> Result<String, String> {
                             });                                                    
                         });               
                         //--------------
-                        Ok(result_info.unwrap())
+                        let maybe_username = get_user_by_princ(new_box_info.clone().user);
+                        let username: String = match maybe_username {
+                            Some(user) => user.nickname,
+                            None => "Unknown".to_string(),
+                        };
+                        let answer = T::BoxWithCount {
+                            username: username,
+                            miner_count: 0,
+                            end_date: new_box_info.clone().end_date,
+                            reg_date: new_box_info.clone().reg_date,
+                            canister_id: new_box_info.clone().canister_id,
+                        };
+                        Ok(answer)
                     },                            
                     Err(e) => 
                     {                        

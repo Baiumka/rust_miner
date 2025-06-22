@@ -2,9 +2,10 @@ import React from "react";
 import { useAuth } from "../context/AuthContext";
 import "bootstrap/dist/css/bootstrap.min.css";
 import RegistrationForm from "../components/RegistrationForm";
+import BoxList from "../components/BoxList";
 
 const LoginPage = () => {
-  const { isAuthenticated, principal, login, logout, loading, needsRegistration, userData } = useAuth();
+  const { isAuthenticated, principal, login, logout, loading, needsRegistration, userData, balance } = useAuth();
 
   if (loading) {
     return (
@@ -33,12 +34,14 @@ const LoginPage = () => {
           <>
             <p className="card-text text-muted">Welcome, <strong>{userData.nickname}</strong></p>
             <p className="card-text text-muted">Your principal, <strong>{principal}</strong></p>
+            <p className="card-text text-muted">Your balance: <strong>{balance} ICP</strong></p>
             <button className="btn btn-outline-danger w-100 mt-3" onClick={logout}>
               Logout
             </button>
           </>
         )}
       </div>
+      <BoxList/>
     </div>
   );
 };

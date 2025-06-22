@@ -1,7 +1,11 @@
-
+import { IDL } from "@dfinity/candid";
+import { Principal } from '@dfinity/principal';
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { AuthClient } from "@dfinity/auth-client";
 import { createActor, canisterId, idlFactory } from 'declarations/miner_backend';
+import { miner_backend } from "../../../declarations/miner_backend"
+import { IcrcLedgerCanister } from "@dfinity/ledger-icrc";
+import { createAgent } from "@dfinity/utils";
 
 const AuthContext = createContext();
 
@@ -14,13 +18,14 @@ export const AuthProvider = ({ children }) => {
   const [needsRegistration, setNeedsRegistration] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userActor, setUserActor] = useState(null);
+  const [balance, setBalance] = useState(null);
 
   useEffect(() => {
     initAuth();
   }, []);
 
   const initAuth = async () => {
-    const client = await AuthClient.create();
+    const client = await AuthClient.create();    
     if (await client.isAuthenticated()) {
       const identity = client.getIdentity();
       fillUserData(identity);
@@ -45,8 +50,7 @@ export const AuthProvider = ({ children }) => {
       {
         idpProvider = `https://identity.ic0.app/#authorize`;
       }
-    }
-    console.log(idpProvider);
+    }    
     return idpProvider;
   };
 
@@ -61,6 +65,21 @@ export const AuthProvider = ({ children }) => {
     });
   };
 
+
+  const getAllBoxes = async () => {
+    let boxes;
+    if(userActor)
+    {
+      boxes = await userActor.get_all_boxes();      
+    }
+    else
+    {
+      boxes = await miner_backend.get_all_boxes();
+    }
+    console.log(boxes);
+    return boxes;
+  };
+
   const fillUserData = async (userIdentity) => {
     const principal = userIdentity.getPrincipal().toString();
     const actor = createActor(canisterId, { agentOptions: { identity: userIdentity } });
@@ -68,6 +87,16 @@ export const AuthProvider = ({ children }) => {
     if ("Ok" in response) {
         setUserData(response.Ok);
         setNeedsRegistration(false);
+        const balance = await actor.get_my_balance();
+        console.log("balance",balance);
+        if(balance.Ok)
+        {          
+          setBalance(Number(balance.Ok) / 100_000_000);
+        }
+        else
+        {
+          setBalance(0);
+        }
     }
     else
     {
@@ -77,8 +106,8 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
     setIdentity(userIdentity);
     setPrincipal(principal);
-    setIsAuthenticated(true);    
-    setUserActor(actor)
+    setIsAuthenticated(true);        
+    setUserActor(actor);
   };
 
   const logout = async () => {
@@ -90,10 +119,8 @@ export const AuthProvider = ({ children }) => {
     setNeedsRegistration(false);
   };
 
-  const register = async (nickname) => {      
-    console.log("Start reg2");  
+  const register = async (nickname) => {          
     const response = await userActor.register(nickname);
-    console.log("response", response);
     if ("Ok" in response) {
         setUserData(response.Ok);
         setNeedsRegistration(false);
@@ -107,6 +134,66 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const approve = async (icp) => {   
+    const provider =  getIdentityProvider();    
+    console.log("provider",provider);
+    const agent = await createAgent({
+      identity,
+      host: provider
+    });
+
+    if (process.env.DFX_NETWORK == "local") {
+      agent.fetchRootKey().catch((err) => {
+        console.warn(
+          "Unable to fetch root key. Check to ensure that your local replica is running"
+        );
+        console.error(err);
+      });
+    }
+  
+    const ledger = IcrcLedgerCanister.create({
+      agent,
+      canisterId: "ryjl3-tyaaa-aaaaa-aaaba-cai",
+    });    
+    const result = await ledger.approve({
+     // fee: null,
+     // memo: null,
+     // from_subaccount: [],
+     // created_at_time: null,
+      spender: { owner: Principal.fromText(canisterId), subaccount: [] },
+      amount: icp + 10_000,
+     // expected_allowance: null,
+     // expires_at: null
+    });    
+    return result;
+
+  };
+
+  const createBox = async (icp) => {   
+    const icp64 = icp * 100_000_000;
+    const approve_result = await approve(icp64);    
+    if(approve_result)
+    {
+      const response = await userActor.create_box(icp64);
+      const balance = await userActor.get_my_balance();      
+      if(balance.Ok)
+      {          
+        setBalance(Number(balance.Ok) / 100_000_000);
+      }
+      else
+      {
+        setBalance(0);
+      }      
+      return response;    
+    }
+    else
+    {      
+      return approve_result;
+    }
+    
+  };
+
+
   return (
     <AuthContext.Provider
       value={{
@@ -118,6 +205,9 @@ export const AuthProvider = ({ children }) => {
         userData,
         needsRegistration,
         register,
+        getAllBoxes,
+        createBox,
+        balance
       }}
     >
       {children}

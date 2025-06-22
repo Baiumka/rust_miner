@@ -1,9 +1,9 @@
 dfx identity use minter
 export MINTER_ACCOUNT_ID=$(dfx ledger account-id)
-dfx identity use baium1
-export SECOND_ACCOUNT_ID=$(dfx ledger account-id)
 dfx identity use baium2
 export DEFAULT_ACCOUNT_ID=$(dfx ledger account-id)
+dfx identity use baium1
+export SECOND_ACCOUNT_ID=$(dfx ledger account-id)
 dfx deploy --specified-id ryjl3-tyaaa-aaaaa-aaaba-cai icp_ledger_canister --argument "
   (variant {
     Init = record {

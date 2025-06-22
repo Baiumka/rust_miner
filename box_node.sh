@@ -4,7 +4,7 @@ dfx deploy miner_backend
 dfx canister call miner_backend register Console
 dfx canister call icp_ledger_canister icrc2_approve '(
   record {
-    spender = record { owner = principal "bd3sg-teaaa-aaaaa-qaaba-cai"; subaccount = null };
+    spender = record { owner = principal "bkyz2-fmaaa-aaaaa-qaaaq-cai"; subaccount = null };
     amount = 500_620_000: nat;
     from_subaccount = null;
     expected_allowance = null;

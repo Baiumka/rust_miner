@@ -17,6 +17,9 @@
   ],
   "dependencies": {
     "@dfinity/auth-client": "^2.4.1",
+    "@dfinity/candid": "^2.4.1",
+    "@dfinity/ledger-icrc": "^2.8.1",
+    "@dfinity/utils": "^2.13.0",
     "bootstrap": "^5.3.6"
   }
 }
