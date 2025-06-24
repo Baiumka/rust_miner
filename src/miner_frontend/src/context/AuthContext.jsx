@@ -26,6 +26,7 @@ export const AuthProvider = ({ children }) => {
 
   const initAuth = async () => {
     const client = await AuthClient.create();    
+    //client.logout();
     if (await client.isAuthenticated()) {
       const identity = client.getIdentity();
       fillUserData(identity);
@@ -155,24 +156,32 @@ export const AuthProvider = ({ children }) => {
       agent,
       canisterId: "ryjl3-tyaaa-aaaaa-aaaba-cai",
     });    
-    const result = await ledger.approve({
-     // fee: null,
-     // memo: null,
-     // from_subaccount: [],
-     // created_at_time: null,
-      spender: { owner: Principal.fromText(canisterId), subaccount: [] },
-      amount: icp + 10_000,
-     // expected_allowance: null,
-     // expires_at: null
-    });    
-    return result;
+    try
+    {
+      const result = await ledger.approve({
+      // fee: null,
+      // memo: null,
+      // from_subaccount: [],
+      // created_at_time: null,
+        spender: { owner: Principal.fromText(canisterId), subaccount: [] },
+        amount: icp + 10_000,
+      // expected_allowance: null,
+      // expires_at: null
+      });          
+      return { Ok: result};
+    }
+    catch (e)
+    {
+      return { Err: e.message};
+    }
+    
 
   };
 
   const createBox = async (icp) => {   
     const icp64 = icp * 100_000_000;
-    const approve_result = await approve(icp64);    
-    if(approve_result)
+    const approve_result = await approve(icp64);        
+    if(approve_result.Ok)
     {
       const response = await userActor.create_box(icp64);
       const balance = await userActor.get_my_balance();      
@@ -189,8 +198,30 @@ export const AuthProvider = ({ children }) => {
     else
     {      
       return approve_result;
+    }    
+  };
+
+  const useBox = async (box, icp) => {   
+    const icp64 = icp * 100_000_000;
+    const approve_result = await approve(icp64);    
+    if(approve_result)
+    {
+      const response = await userActor.create_miner(box.canister_id, icp64);
+      const balance = await userActor.get_my_balance();      
+      if(balance.Ok)
+      {          
+        setBalance(Number(balance.Ok) / 100_000_000);
+      }
+      else
+      {
+        setBalance(0);
+      }            
+      return response;    
     }
-    
+    else
+    {      
+      return approve_result;
+    }    
   };
 
 
@@ -207,7 +238,8 @@ export const AuthProvider = ({ children }) => {
         register,
         getAllBoxes,
         createBox,
-        balance
+        balance,
+        useBox
       }}
     >
       {children}

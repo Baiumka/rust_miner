@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 
-const BoxCard = ({ box, addBox }) => {
+const BoxCard = ({ box, addBox, useBox }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [newBoxLoading, setNewBoxLoading] = useState(false);
-  
+
   const Countdown = ({ endDateNano }) => {
     const [timeLeft, setTimeLeft] = useState(getTimeLeft(endDateNano));
 
@@ -23,7 +23,7 @@ const BoxCard = ({ box, addBox }) => {
         const end = Number(endDateNano) / 1_000_000; 
         const diff = end - now;
 
-        if (diff <= 0) return "Expired";
+        if (diff <= 0) return "Active";
 
         const seconds = Math.floor(diff / 1000) % 60;
         const minutes = Math.floor(diff / (1000 * 60)) % 60;
@@ -39,6 +39,12 @@ const BoxCard = ({ box, addBox }) => {
         setNewBoxLoading(false);
     };
 
+    const useBoxHandler = async () => {
+        setNewBoxLoading(true);
+        const response = await useBox(box);
+        setNewBoxLoading(false);
+    };
+
   return (
     
         <div className="card hover-card h-100 shadow-sm" onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>    
@@ -49,12 +55,37 @@ const BoxCard = ({ box, addBox }) => {
                     className="card-img-top first"                            
                 />                                    
                 <div className="card-body">
-                    {isHovered ? <button className="btn btn-success w-100">Take it</button> : <></>}
+                    {!newBoxLoading ? (
+                        <>
+                            {isHovered ? <button className="btn btn-success w-100" onClick={useBoxHandler}>Take it</button>: <></>}
+                        </>
+                    ) : (
+                        <div className="d-flex justify-content-center my-4">
+                            <div className="spinner-border text-primary" role="status" />
+                        </div>    
+                    )}                                               
                     <strong>Creator:</strong> {box.username}
                     <p className="card-text">                              
                     <strong>Time Left:</strong> <Countdown endDateNano={box.end_date} /> <br />      
                     <strong>Miner Count:</strong> {box.miner_count}
-                    </p>                    
+                    </p>           
+                    {box.user_miners && box.user_miners.length > 0 ? (
+                        <>
+                        <strong>Your Miners:</strong>
+                            {box.user_miners.map((miner, index) => {              
+                               return (
+                                <div className="d-flex align-items-center gap-2 small" key={index}>
+                                  <div className="fs-6 fw-light">
+                                    <strong>ID:</strong> {miner.canister_id}
+                                  </div>
+                                  <strong><Countdown endDateNano={miner.end_date} /></strong>
+                                </div>
+                              );
+                            })}   
+                        </>      
+                    ) : (
+                        <></>
+                    )}
                 </div>
             </div>
         ) : ( 

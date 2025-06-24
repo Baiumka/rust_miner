@@ -7,11 +7,13 @@ export const PromptDialogProvider = ({ children }) => {
   const [visible, setVisible] = useState(false);
   const [message, setMessage] = useState('');
   const [inputValue, setInputValue] = useState('');
+  const [minValue, setMinValue] = useState('');
   const [resolvePromise, setResolvePromise] = useState(null);
 
   const showPrompt = (msg, defaultValue = '') => {
     setMessage(msg);
     setInputValue(defaultValue);
+    setMinValue(defaultValue);
     setVisible(true);
     return new Promise((resolve) => {
       setResolvePromise(() => resolve);
@@ -49,7 +51,7 @@ export const PromptDialogProvider = ({ children }) => {
                     step="0.0001"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
-                    min="5"
+                    min={minValue}
                     autoFocus
                   />
                 </div>

@@ -1,9 +1,6 @@
 use candid::{CandidType};
 use serde::{Deserialize, Serialize};
 use candid::{Nat, Principal};
-use ic_stable_memory::collections::SVec;
-use ic_stable_memory::derive::{AsFixedSizeBytes, CandidAsDynSizeBytes, StableType};
-use ic_stable_memory;
 
 pub const LEDGER_CANISTER: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 
@@ -29,7 +26,8 @@ pub struct BoxWithCount {
     pub miner_count: u32,
     pub end_date: u64,
     pub reg_date: u64,
-    pub canister_id: String
+    pub canister_id: String,
+    pub user_miners: Vec<Miner>
 }
 
 #[derive(CandidType, Deserialize, Clone)]
@@ -40,11 +38,6 @@ pub struct Miner {
     pub reg_date: u64,
     pub end_date: u64,
     pub is_end: bool
-}
-
-#[derive(AsFixedSizeBytes)]
-pub struct StableUser {
-    pub nickname: SVec<u8>,    
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug)]

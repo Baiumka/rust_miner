@@ -25,3 +25,8 @@ async fn get_info() -> String {
     });  
     return api::id().to_string() + " MINER " + &result;
 }
+
+#[ic_cdk::update]
+async fn get_subaccount() -> Vec<u8> {
+    SUB_ACCOUNT.with(|sub| sub.borrow().to_vec())
+}

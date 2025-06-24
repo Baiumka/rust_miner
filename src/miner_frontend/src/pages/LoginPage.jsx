@@ -3,7 +3,8 @@ import { useAuth } from "../context/AuthContext";
 import "bootstrap/dist/css/bootstrap.min.css";
 import RegistrationForm from "../components/RegistrationForm";
 import BoxList from "../components/BoxList";
-
+import { ConnectWallet } from "@nfid/identitykit/react"
+import "@nfid/identitykit/react/styles.css"
 const LoginPage = () => {
   const { isAuthenticated, principal, login, logout, loading, needsRegistration, userData, balance } = useAuth();
 
@@ -19,9 +20,12 @@ const LoginPage = () => {
     <div className="card text-center shadow-sm p-4 mt-5 mx-auto">
       <div className="card-body">
         {!isAuthenticated ? (
+          <>
           <button className="btn btn-primary w-100" onClick={login}>
             Login with Internet Identity
           </button>
+          <ConnectWallet />
+          </>
         ) : needsRegistration ? (
           <>
             <p className="text-muted">Complete your registration</p>

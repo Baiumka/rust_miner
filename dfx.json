@@ -13,7 +13,8 @@
     "miner_backend": {
       "candid": "src/miner_backend/miner_backend.did",
       "package": "miner_backend",
-      "type": "rust"
+      "type": "rust",
+      "gzip": true
     },
     "internet-identity": {
       "type": "pull",

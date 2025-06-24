@@ -16,6 +16,7 @@ type BoxWithCount = record {
   end_date: nat64;
   reg_date: nat64;
   canister_id: text;  
+  user_miners: vec Miner;
 };
 
 type Miner = record {
@@ -33,8 +34,7 @@ service : {
   get_user_by_princ : (text) -> (opt User) query;
   show_all_users : () -> (vec record { text; User }) query;
   register : (text) -> (variant { Ok: User; Err: text });  
-  get_user : () -> (variant { Ok: User; Err: text });    
-  call_get_principal : (text) -> (variant { Ok: text; Err: text });
+  get_user : () -> (variant { Ok: User; Err: text });      
   get_my_balance : () -> (variant { Ok: nat64; Err: text });
   get_my_allowance : () -> (variant { Ok: nat; Err: text });
   create_box : (nat) -> (variant { Ok: BoxWithCount; Err: text });  

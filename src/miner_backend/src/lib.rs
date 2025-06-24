@@ -1,14 +1,12 @@
 use ic_cdk::api::call::call;
 use ic_cdk::api;
-use candid::{encode_args, decode_args};
-use ic_cdk::api::stable::{stable_write, stable_read};
 use ic_cdk::api::management_canister::main::{
     CreateCanisterArgument, create_canister, InstallCodeArgument, install_code, CanisterInstallMode,
 };
 use ic_cdk::api::management_canister::provisional::CanisterSettings;
 use candid::{Nat, Principal};
 use std::collections::BTreeMap;
-use types::{self as T, BoxWithCount};
+use types::{self as T};
 use ic_cdk_timers::{set_timer};
 use std::time::Duration;
 use ic_cdk::api::print;
@@ -22,7 +20,7 @@ const MIN_BOX_COST: u64 = 500_000_000;
 const MIN_MINER_COST: u64 = 500_000;
 const FEE: u64 = 10_000;
 const LOTTERY_TIME: u64 = 1 * 1 * 1 * 60; //days hours mins seconds
-const MINER_TIME: u64 = 1 * 1 * 1 * 20; //days hours mins seconds
+const MINER_TIME: u64 = 1 * 1 * 1 * 30; //days hours mins seconds
 
 thread_local! {
     static USERS: std::cell::RefCell<BTreeMap<String, T::User>> = std::cell::RefCell::new(BTreeMap::new());
@@ -46,8 +44,8 @@ fn pre_upgrade() {
                             box_miner.borrow().clone(),
                             *sub_index.borrow(),
                         )).expect("Failed to save state to stable memory");
-                    });
-                });
+                    });                   
+                });                
             });
         });
     });
@@ -66,6 +64,30 @@ fn post_upgrade() {
     USERS.with(|u| *u.borrow_mut() = users);
     BOXES.with(|b| *b.borrow_mut() = boxes);
     MINERS.with(|m| *m.borrow_mut() = miners);
+    /*let cloned_miners: Vec<(String, T::Miner)> = MINERS.with(|m| {
+        m.borrow()
+            .iter()
+            .map(|(id, info)| (id.clone(), info.clone()))
+            .collect()
+    });    
+    for (miner_id, miner_info) in cloned_miners {
+        if(miner_info.is_end == false)
+        {
+            print(format!("Starting miner timer {:?}", miner_id));    
+            
+            let mut seconds: u64 = 2; 
+            print(format!("from_secs: {:?}", seconds));
+            if seconds < 1 {
+                seconds = 1;
+            }    
+            set_timer(Duration::from_secs(seconds), move || {
+                ic_cdk::spawn(async move {
+                    miner_end(miner_info.clone()).await;
+                });
+            });
+        }   
+    }*/
+
     BOX_MINER.with(|bm| *bm.borrow_mut() = box_miner);
     SUB_INDEX.with(|si| *si.borrow_mut() = sub_index);
 }
@@ -157,23 +179,6 @@ async fn create_miner_canister() -> String {
     return canister_id.to_text();
 }
 
-#[ic_cdk::update]
-async fn call_get_principal(target_canister: String) -> Result<String, String> {
-    let maybe_principal = candid::Principal::from_text(target_canister);
-    match maybe_principal {
-        Ok(principal) => {
-            match call::<(), (String,)>(principal, "get_principal", ()).await {
-                Ok((principal_str,)) => Ok(principal_str),
-                Err(e) => Err(format!("Call failed: {:?}", e)),
-            }
-        }
-        Err(err) => {
-            Err("User already exist".to_string())
-        }
-    }
-}
-
-
 
 async fn get_balance(target_principal: Principal, sub: Option<Vec<u8>>) -> Result<u64, String> {
     let maybe_principal = candid::Principal::from_text(T::LEDGER_CANISTER);
@@ -249,10 +254,10 @@ async fn get_my_allowance() -> Result<Nat, String> {
     }
 }
 
-#[ic_cdk::query]
+#[ic_cdk::update]
 fn get_all_boxes() -> Vec<T::BoxWithCount> {
     let mut result = vec![];
-
+    let user_principal = ic_cdk::caller().to_text();
     BOXES.with(|boxes_ref| {
         let boxes = boxes_ref.borrow();
 
@@ -260,19 +265,32 @@ fn get_all_boxes() -> Vec<T::BoxWithCount> {
             if box_info.is_end {
                 continue; 
             }
-            let active_miners = get_active_miners(box_id.clone());
+            let all_miners = get_active_miners(box_id.clone());
             let maybe_username = get_user_by_princ(box_info.clone().user);
             let username: String = match maybe_username {
                 Some(user) => user.nickname,
                 None => "Unknown".to_string(),
             };
-            if !active_miners.is_empty() {
+            if !all_miners.is_empty() {
+                let user_miners: Vec<T::Miner> = all_miners
+                .iter()
+                .cloned()
+                .filter(|miner| miner.user == user_principal)
+                .collect();
+
+                let active_miners: Vec<T::Miner> = all_miners
+                .iter()
+                .cloned()
+                .filter(|miner| miner.is_end == true)
+                .collect();
+
                 result.push(T::BoxWithCount {
                     username: username,
                     miner_count: active_miners.len() as u32,
                     end_date: box_info.clone().end_date,
                     reg_date: box_info.clone().reg_date,
                     canister_id: box_info.clone().canister_id,
+                    user_miners: user_miners
                 });
             }
             else {
@@ -282,6 +300,7 @@ fn get_all_boxes() -> Vec<T::BoxWithCount> {
                     end_date: box_info.clone().end_date,
                     reg_date: box_info.clone().reg_date,
                     canister_id: box_info.clone().canister_id,
+                    user_miners: Vec::new()
                 });
             }
         }
@@ -295,10 +314,152 @@ fn get_active_miners(box_id: String) -> Vec<T::Miner> {
         let miners = miners_ref.borrow();
         miners
             .values()
-            .filter(|m| m.box_id == *box_id && m.is_end)
+            .filter(|m| m.box_id == *box_id)
             .cloned()
             .collect()
     })
+}
+
+async fn miner_end(miner: T::Miner) -> () {
+    let canister_id_for_miner = miner.canister_id.clone();
+    print(format!("Miner {:?} is over", canister_id_for_miner.clone()));
+
+    MINERS.with(|miners_ref| {
+        let mut miners = miners_ref.borrow_mut();
+        if let Some(miner) = miners.get_mut(&canister_id_for_miner) {
+            miner.is_end = true;
+        }
+    });
+
+    match call::<(), (Vec<u8>,)>(candid::Principal::from_text(miner.canister_id).unwrap(), "get_subaccount", ()).await {
+        Ok((sub_vec,)) => {
+            let result_sub = Some(sub_vec);                 
+
+            match get_balance(api::id(), result_sub.clone()).await {
+            Ok(balance64) => { 
+                let award = Nat::from(balance64);                       
+                let prize_pool = award.clone() * 25u32 / 100u32;
+                let for_box_creator = award.clone() * 65u32 / 100u32;
+                let admin_tax = award.clone() - prize_pool.clone() - for_box_creator.clone();   
+
+                let is_end = BOXES.with(|boxes_ref| {
+                    let boxes = boxes_ref.borrow();
+                    if let Some(box_id) = boxes.get(&canister_id_for_miner) {                                        
+                        box_id.is_end
+                    }
+                    else {
+                        true
+                    }
+                });         
+        
+                if is_end {
+                    match transfer(award - FEE, result_sub.clone(), api::id(), None).await {
+                        Ok(index) => {
+                            print(format!("WHOLE_admin_tax success: {:?}", index));
+                        },
+                        Err(e) => {
+                            print(format!("WHOLE_admin_tax failed: {:?}", e));
+                        }
+                    }
+                }   
+                else {                                                                                                                                          
+                    match transfer(admin_tax - FEE, result_sub.clone(), api::id(), None).await {
+                        Ok(index) => {
+                            print(format!("admin_tax success: {:?}", index));
+                        },
+                        Err(e) => {
+                            print(format!("admin_tax failed: {:?}", e));
+                        }
+                    }
+                    let owner_box = BOXES.with(|boxes| boxes.borrow().get(&miner.box_id).cloned()).unwrap();
+                    let owner_user = owner_box.user;
+                    match transfer(for_box_creator - FEE, result_sub.clone(), Principal::from_text(owner_user).unwrap(), None).await {
+                        Ok(index) => {
+                            print(format!("for_box_creator success: {:?}", index));
+                        },
+                        Err(e) => {
+                            print(format!("for_box_creator failed: {:?}", e));
+                        }
+                    }
+                                                
+                    match call::<(), (Vec<u8>,)>(candid::Principal::from_text(miner.box_id).unwrap(), "get_subaccount", ()).await {
+                        Ok((sub_vec,)) => {
+                            let sub = Some(sub_vec); 
+                            match transfer(prize_pool - FEE, result_sub.clone(), api::id(), sub).await {
+                                Ok(index) => {
+                                    print(format!("prize_pool success: {:?}", index));
+                                },
+                                Err(e) => {
+                                    print(format!("prize_pool failed: {:?}", e));
+                                }
+                            }
+                        }
+                        Err(e) => {print(format!("get_subaccount for prize_pool failed: {}", e.1));}
+                    }         
+                }
+            },
+            Err(e) => {print(format!("{}", e));}
+            }
+        }
+        Err(e) => {print(format!("get_subaccount for prize_pool failed: {}", e.1));}
+    } 
+}
+
+
+
+async fn box_end(box_info: T::BoxInfo) -> () {
+    let canister_id_for_lottery = box_info.canister_id.clone();
+    print(format!("Lottery {:?} is over", canister_id_for_lottery.clone()));
+    match call::<(), (Vec<u8>,)>(candid::Principal::from_text(box_info.canister_id).unwrap(), "get_subaccount", ()).await {
+        Ok((sub_vec,)) => {
+            let result_sub = Some(sub_vec);
+            BOXES.with(|boxes_ref| {
+            let mut boxes = boxes_ref.borrow_mut();
+            if let Some(box_i) = boxes.get_mut(&canister_id_for_lottery.clone()) {
+                box_i.is_end = true;
+            }
+            });
+            let winner = choose_random_miner(canister_id_for_lottery.clone()).await;
+            if winner.is_some()
+            {
+                match get_balance(api::id(), result_sub.clone()).await {
+                    Ok(balance64) => {                                        
+                        let balance_nat = Nat::from(balance64);                                    
+                        let prize: Nat = balance_nat - FEE;      
+                        match transfer(prize, result_sub.clone(), Principal::from_text(winner.unwrap().user).unwrap(), None).await {
+                            Ok(index) => {
+                                print(format!("Prize success: {:?}", index));
+                            },
+                            Err(e) => {
+                                print(format!("Prize failed: {:?}", e));
+                            }
+                        }
+                    },
+                    Err(e) => { print(format!("Prize get balance failed: {:?}", e)); }
+                    } 
+            }
+            else {
+                print(format!("NO miners in {:?} ", canister_id_for_lottery.clone()));
+                match get_balance(api::id(), result_sub.clone()).await {
+                    Ok(balance64) => {                                        
+                        let balance_nat = Nat::from(balance64);                                                            
+                        let prize: Nat = balance_nat - FEE;      
+                        match transfer(prize, result_sub.clone(), Principal::from_text(box_info.user).unwrap(), None).await {
+                            Ok(index) => {
+                                print(format!("return Prize success: {:?}", index));
+                            },
+                            Err(e) => {
+                                print(format!("return Prize failed: {:?}", e));
+                            }
+                        }
+                    },
+                    Err(e) => { print(format!("Prize get balance failed: {:?}", e)); }
+                } 
+            }
+        }
+        Err(e) => {print(format!("cant call get_subaccount ({}) : {}", canister_id_for_lottery, e.1));}
+    } 
+
 }
 
 #[ic_cdk::update]
@@ -337,87 +498,25 @@ async fn create_miner(box_id: String, award: Nat) -> Result<String, String> {
                             reg_date: now,
                             end_date: now + (MINER_TIME * 1_000_000_000),
                             is_end: false
-                        };                                                 
+                        };              
+                                                  
                         MINERS.with(|miners: &std::cell::RefCell<BTreeMap<String, T::Miner>>| {
                             miners.borrow_mut().insert(new_canister_id.clone(), new_miner_info.clone());
                         });
                         BOX_MINER.with(|map| {
                             map.borrow_mut().insert(new_canister_id.clone(), box_id.clone());
-                        });
-                        let canister_id_for_miner = new_canister_id.clone();
+                        });                        
                         //---------TIMER
                         print(format!("Starting miner timer {:?}", new_canister_id.clone()));
-                        set_timer(Duration::from_secs(MINER_TIME), move || {                            
+                        
+                        ic_cdk_timers::set_timer(Duration::from_secs(MINER_TIME), move || {                        
+                            ic_cdk::spawn(miner_end(new_miner_info.clone()));
+                        });
+                        /*set_timer(Duration::from_secs(MINER_TIME), move || {                            
                             ic_cdk::spawn(async move {
-                                print(format!("Miner {:?} is over", canister_id_for_miner.clone()));
-
-                                MINERS.with(|miners_ref| {
-                                    let mut miners = miners_ref.borrow_mut();
-                                    if let Some(miner) = miners.get_mut(&canister_id_for_miner) {
-                                        miner.is_end = true;
-                                    }
-                                });
-
-                                let prize_pool = award.clone() * 25u32 / 100u32;
-                                let for_box_creator = award.clone() * 65u32 / 100u32;
-                                let admin_tax = award.clone() - prize_pool.clone() - for_box_creator.clone();   
-
-                                let is_end = BOXES.with(|boxes_ref| {
-                                    let boxes = boxes_ref.borrow();
-                                    if let Some(box_id) = boxes.get(&canister_id_for_miner) {                                        
-                                        box_id.is_end
-                                    }
-                                    else {
-                                        true
-                                    }
-                                });         
-                                if is_end {
-                                    match transfer(award - FEE, result_sub.clone(), api::id(), None).await {
-                                        Ok(index) => {
-                                            print(format!("WHOLE_admin_tax success: {:?}", index));
-                                        },
-                                        Err(e) => {
-                                            print(format!("WHOLE_admin_tax failed: {:?}", e));
-                                        }
-                                    }
-                                }   
-                                else {                                                                                                                                          
-                                    match transfer(admin_tax - FEE, result_sub.clone(), api::id(), None).await {
-                                        Ok(index) => {
-                                            print(format!("admin_tax success: {:?}", index));
-                                        },
-                                        Err(e) => {
-                                            print(format!("admin_tax failed: {:?}", e));
-                                        }
-                                    }
-                                    
-                                    match transfer(for_box_creator - FEE, result_sub.clone(), ic_cdk::caller(), None).await {
-                                        Ok(index) => {
-                                            print(format!("for_box_creator success: {:?}", index));
-                                        },
-                                        Err(e) => {
-                                            print(format!("for_box_creator failed: {:?}", e));
-                                        }
-                                    }
-                                                                
-                                    match call::<(), (Vec<u8>,)>(candid::Principal::from_text(box_id).unwrap(), "get_subaccount", ()).await {
-                                        Ok((sub_vec,)) => {
-                                            let sub = Some(sub_vec); 
-                                            match transfer(prize_pool - FEE, result_sub.clone(), api::id(), sub).await {
-                                                Ok(index) => {
-                                                    print(format!("prize_pool success: {:?}", index));
-                                                },
-                                                Err(e) => {
-                                                    print(format!("prize_pool failed: {:?}", e));
-                                                }
-                                            }
-                                        }
-                                        Err(e) => {print(format!("get_subaccount for prize_pool failed: {}", e.1));}
-                                    } 
-                                }
-                                
+                                miner_end(new_miner_info.clone()).await;                                                               
                             });                                                    
-                        });               
+                        });*/                   
                         //--------------
                        
                         Ok(new_canister_id)
@@ -475,60 +574,13 @@ async fn create_box(award: Nat) -> Result<T::BoxWithCount, String> {
                         };    
                         BOXES.with(|boxes: &std::cell::RefCell<BTreeMap<String, T::BoxInfo>>| {
                             boxes.borrow_mut().insert(new_canister_id.clone(), new_box_info.clone());
-                        });
-                        let result_info = call_get_principal(new_canister_id.clone()).await;
-                        //---------TIMER
-                        let canister_id_for_lottery = new_canister_id.clone();
+                        });                        
+                        //---------TIMER                        
                         print(format!("Starting lottery timer {:?}", new_canister_id.clone()));
-                        set_timer(Duration::from_secs(LOTTERY_TIME), move || {                            
-                            ic_cdk::spawn(async move {
-                               print(format!("Lottery {:?} is over", canister_id_for_lottery.clone()));
-                               BOXES.with(|boxes_ref| {
-                                let mut boxes = boxes_ref.borrow_mut();
-                                if let Some(box_i) = boxes.get_mut(&canister_id_for_lottery.clone()) {
-                                    box_i.is_end = true;
-                                }
-                                });
-                               let winner = choose_random_miner(canister_id_for_lottery.clone()).await;
-                               if winner.is_some()
-                               {
-                                    match get_balance(ic_cdk::caller(), None).await {
-                                        Ok(balance64) => {                                        
-                                            let balance_nat = Nat::from(balance64);                                    
-                                            let prize: Nat = balance_nat - FEE;      
-                                            match transfer(prize, result_sub.clone(), Principal::from_text(winner.unwrap().user).unwrap(), None).await {
-                                                Ok(index) => {
-                                                    print(format!("Prize success: {:?}", index));
-                                                },
-                                                Err(e) => {
-                                                    print(format!("Prize failed: {:?}", e));
-                                                }
-                                            }
-                                        },
-                                        Err(e) => { print(format!("Prize get balance failed: {:?}", e)); }
-                                        } 
-                                }
-                               else {
-                                    print(format!("NO miners in {:?} ", canister_id_for_lottery.clone()));
-                                    match get_balance(ic_cdk::caller(), None).await {
-                                        Ok(balance64) => {                                        
-                                            let balance_nat = Nat::from(balance64);                                    
-                                            let prize: Nat = balance_nat - FEE;      
-                                            match transfer(prize, result_sub.clone(), ic_cdk::caller(), None).await {
-                                                Ok(index) => {
-                                                    print(format!("return Prize success: {:?}", index));
-                                                },
-                                                Err(e) => {
-                                                    print(format!("return Prize failed: {:?}", e));
-                                                }
-                                            }
-                                        },
-                                        Err(e) => { print(format!("Prize get balance failed: {:?}", e)); }
-                                    } 
-                               }
-                              
-                            });                                                    
-                        });               
+                        let box_for_timer = new_box_info.clone();
+                        ic_cdk_timers::set_timer(Duration::from_secs(LOTTERY_TIME), move || {                        
+                            ic_cdk::spawn(box_end(box_for_timer.clone()));
+                        });              
                         //--------------
                         let maybe_username = get_user_by_princ(new_box_info.clone().user);
                         let username: String = match maybe_username {
@@ -541,6 +593,7 @@ async fn create_box(award: Nat) -> Result<T::BoxWithCount, String> {
                             end_date: new_box_info.clone().end_date,
                             reg_date: new_box_info.clone().reg_date,
                             canister_id: new_box_info.clone().canister_id,
+                            user_miners: Vec::new()
                         };
                         Ok(answer)
                     },                            
