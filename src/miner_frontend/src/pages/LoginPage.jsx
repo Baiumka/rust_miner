@@ -23,8 +23,7 @@ const LoginPage = () => {
           <>
           <button className="btn btn-primary w-100" onClick={login}>
             Login with Internet Identity
-          </button>
-          <ConnectWallet />
+          </button>          
           </>
         ) : needsRegistration ? (
           <>
